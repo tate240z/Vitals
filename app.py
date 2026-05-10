@@ -2,66 +2,74 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Setup page config for mobile/web responsiveness
-st.set_page_config(page_title="9509 Lifeline Dashboard", layout="wide")
+# 1. REPLACE THE LINK BELOW WITH YOUR GOOGLE SHEET CSV LINK
+SHEET_URL = https://docs.google.com/spreadsheets/d/e/2PACX-1vTTulE0KjYP78CgSG0tBU9K21LUfrzZs2Uu9SSymBYUnXAoa2HfEsjRUsImdNpPWylDrCp5hJK-N4nD/pubhtml
 
-# Load the data we processed from your CSV
-@st.cache_data
+st.set_page_config(page_title="9509 Dashboard", layout="wide")
+
+@st.cache_data(ttl=300)
 def load_data():
-    df = pd.read_csv('app_backend_data.csv')
-    return df
+    try:
+        # Load data, skipping the first 3 rows of metadata
+        df = pd.read_csv(SHEET_URL, skiprows=3)
+        
+        # Identify categories (ENGINE, EXHAUST, etc.)
+        df['Category'] = df['Item'].where(df.iloc[:, 1:14].isna().all(axis=1)).ffill()
+        
+        # Select the event columns (ending hours)
+        event_cols = [c for c in df.columns if 'SRO' in c or 'JAN' in c or 'FEB' in c]
+        
+        def get_latest(row):
+            vals = pd.to_numeric(row[event_cols], errors='coerce').dropna()
+            return vals.iloc[-1] if not vals.empty else 0
+
+        # Filter for parts with limits and calculate life
+        df_parts = df[df['Runtime Limit'].notnull()].copy()
+        df_parts['Current_Hours'] = df_parts.apply(get_latest, axis=1)
+        df_parts['Remaining_Hours'] = df_parts['Runtime Limit'] - df_parts['Current_Hours']
+        df_parts['Life_Pct'] = (df_parts['Remaining_Hours'] / df_parts['Runtime Limit'] * 100).clip(0, 100)
+        
+        return df_parts
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        return None
 
 df = load_data()
 
-st.title("🏎️ Porsche 992 GT3R (9509) | Component Lifelines")
-st.markdown("---")
+if df is not None:
+    st.title("🏎️ 992 GT3R (9509) | Component Lifelines")
+    
+    # --- TOP ROW: KPI CARDS ---
+    urgent_df = df[df['Life_Pct'] <= 15]
+    attention_df = df[(df['Life_Pct'] > 15) & (df['Life_Pct'] <= 30)]
+    
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Latest Chassis Time", f"{df['Current_Hours'].max():.1f} hrs")
+    col2.metric("Urgent Replacements", len(urgent_df))
+    col3.metric("Upcoming Service", len(attention_df))
 
-# --- SIDEBAR: LOG NEW HOURS ---
-st.sidebar.header("Log New Session")
-last_event = "COTA SRO" # Example based on your sheet
-added_hours = st.sidebar.number_input("Add Hours from Last Session", min_value=0.0, step=0.1)
+    # --- URGENT ALERTS ---
+    if not urgent_df.empty:
+        st.error("### ⚠️ CRITICAL SERVICE REQUIRED")
+        st.table(urgent_df[['Item', 'Remaining_Hours', 'Life_Pct']].sort_values('Life_Pct'))
 
-if st.sidebar.button("Update Fleet Hours"):
-    st.sidebar.success(f"Added {added_hours} hrs to all components.")
-    # In a live app, this would write back to a Google Sheet or Database
+    # --- VISUALIZATION ---
+    st.subheader("System Health Overview")
+    cat_health = df.groupby('Category')['Life_Pct'].mean().reset_index()
+    fig = px.bar(cat_health, x='Category', y='Life_Pct', color='Life_Pct',
+                 color_continuous_scale='RdYlGn', range_color=[0,100])
+    st.plotly_chart(fig, use_container_width=True)
 
-# --- TOP ROW: KPI CARDS ---
-urgent_count = len(df[df['Life_Pct'] <= 15])
-attention_count = len(df[(df['Life_Pct'] > 15) & (df['Life_Pct'] <= 30)])
-
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Current Chassis Hours", "41.7 hrs", "+5.6")
-col2.metric("Urgent Replacements", urgent_count, delta="-2", delta_color="inverse")
-col3.metric("Upcoming Service", attention_count)
-col4.metric("Status", "Race Ready", delta_color="normal")
-
-# --- MIDDLE ROW: CRITICAL ALERTS ---
-if urgent_count > 0:
-    st.error("### ⚠️ CRITICAL: PARTS EXCEEDING SAFETY LIMITS")
-    urgent_df = df[df['Life_Pct'] <= 15].sort_values('Life_Pct')
-    st.dataframe(urgent_df[['Category', 'Item', 'Remaining_Hours', 'Life_Pct']], use_container_width=True)
-
-# --- VISUALIZATION: SYSTEM HEALTH ---
-st.subheader("System Health Overview")
-# Group by category for a high-level view
-cat_health = df.groupby('Category')['Life_Pct'].mean().reset_index()
-fig = px.bar(cat_health, x='Category', y='Life_Pct', 
-             title="Avg Life Remaining by System",
-             color='Life_Pct', color_continuous_scale='RdYlGn', range_color=[0,100])
-st.plotly_chart(fig, use_container_width=True)
-
-# --- BOTTOM ROW: SEARCHABLE INVENTORY ---
-st.subheader("Full Component Tracking")
-search_query = st.text_input("Search for a part (e.g., 'Axle', 'Brake', 'Filter')...")
-
-if search_query:
-    display_df = df[df['Item'].str.contains(search_query, case=False)]
+    # --- SEARCHABLE LIST ---
+    st.subheader("Full Component Tracking")
+    query = st.text_input("Search for a part...")
+    if query:
+        df = df[df['Item'].str.contains(query, case=False)]
+    
+    st.dataframe(
+        df[['Category', 'Item', 'Runtime Limit', 'Current_Hours', 'Life_Pct']]
+        .style.background_gradient(subset=['Life_Pct'], cmap='RdYlGn', vmin=0, vmax=100)
+        .format({"Life_Pct": "{:.1f}%"})
+    )
 else:
-    display_df = df
-
-# Styled table with color-coded bars
-st.dataframe(
-    display_df.style.background_gradient(subset=['Life_Pct'], cmap='RdYlGn', vmin=0, vmax=100)
-    .format({"Life_Pct": "{:.1f}%", "Remaining_Hours": "{:.1f} hrs"}),
-    use_container_width=True
-)
+    st.warning("Waiting for data connection... check the SHEET_URL in the code.")
