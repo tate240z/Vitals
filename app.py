@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 
 # 1. REPLACE THIS WITH YOUR PUBLISHED CSV LINK
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTTulE0KjYP78CgSG0tBU9K21LUfrzZs2Uu9SSymBYUnXAoa2HfEsjRUsImdNpPWylDrCp5hJK-N4nD/pubhtml"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTTulE0KjYP78CgSG0tBU9K21LUfrzZs2Uu9SSymBYUnXAoa2HfEsjRUsImdNpPWylDrCp5hJK-N4nD/pub?output=csv"
 
 st.set_page_config(page_title="9509 Dashboard", layout="wide")
 
