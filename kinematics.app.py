@@ -1,68 +1,119 @@
 import streamlit as st
 
-# --- DASHBOARD CONFIG ---
-st.set_page_config(page_title="GT3R Kinematics", layout="wide")
+st.set_page_config(page_title="992 GT3 R Kinematics Master", layout="wide")
 
-# --- DATA VAULT (Directly from your Porsche PDF) ---
-# Each setup includes: Lower Front (LF), Lower Rear (LR), Upper Front (UF), Upper Rear (UR), Tierod (TR)
-# Values are in millimeters
-setup_specs = {
-    "FS15 (Baseline/Daytona)": {
-        "LF Lower WB": -5.0, "LR Lower WB": 3.0, 
-        "UF Upper WB": 5.0, "UR Upper WB": -5.0, "Tierod": 1.0
+# --- THE MASTER DATA ENGINE ---
+# Mapping every adjustment point from the Porsche Technical Manual
+setups = {
+    "FS15 - Baseline": {
+        "Reference rideheight [mm]": 50,
+        "Reference toe [°]": 0,
+        "Reference camber [°]": -3.0,
+        "Damper ratio": 0.657,
+        "Rollcenter [mm]": 14.062,
+        "Antidive [%]": 164.948,
+        "Caster [°]": 8.178,
+        "Wheelbase vs RS25 [mm]": 2504.599,
+        # --- SHIM STACKS (Chassis Side) ---
+        "FP wishbone lower front [mm]": -5,
+        "FP wishbone lower rear [mm]": 3,
+        "FP wishbone upper front [mm]": 5,
+        "FP wishbone upper rear [mm]": -5,
+        # --- SHIM STACKS (Wheel Side) ---
+        "LP wishbone upper [mm]": 0,
+        "LP wishbone lower [mm]": 0,
+        "LP tierod [mm]": 2
     },
-    "FS15-NSL (Nordschleife)": {
-        "LF Lower WB": -5.0, "LR Lower WB": 3.0, 
-        "UF Upper WB": 5.0, "UR Upper WB": -5.0, "Tierod": 2.0
+    "FS16 - Daytona/Evo": {
+        "Reference rideheight [mm]": 50,
+        "Reference toe [°]": 0,
+        "Reference camber [°]": -2.0,
+        "Damper ratio": 0.660,
+        "Rollcenter [mm]": 1.212,
+        "Antidive [%]": 168.800,
+        "Caster [°]": 8.133,
+        "Wheelbase vs RS25 [mm]": 2504.757,
+        # --- SHIM STACKS (Chassis Side) ---
+        "FP wishbone lower front [mm]": -5,
+        "FP wishbone lower rear [mm]": 3,
+        "FP wishbone upper front [mm]": 5,
+        "FP wishbone upper rear [mm]": -5,
+        # --- SHIM STACKS (Wheel Side) ---
+        "LP wishbone upper [mm]": -5,
+        "LP wishbone lower [mm]": 0,
+        "LP tierod [mm]": 0
     },
-    "FS16 (Evo Production)": {
-        "LF Lower WB": -5.0, "LR Lower WB": 3.0, 
-        "UF Upper WB": 5.0, "UR Upper WB": -5.0, "Tierod": 2.0
-    },
-    "FS17 (High Roll Center)": {
-        "LF Lower WB": -5.0, "LR Lower WB": 3.0, 
-        "UF Upper WB": 5.0, "UR Upper WB": -5.0, "Tierod": 3.0
+    "FS17 - Nordschleife/High RC": {
+        "Reference rideheight [mm]": 70,
+        "Reference toe [°]": 0,
+        "Reference camber [°]": -3.0,
+        "Damper ratio": 0.641,
+        "Rollcenter [mm]": 51.316,
+        "Antidive [%]": 161.653,
+        "Caster [°]": 6.970,
+        "Wheelbase vs RS25 [mm]": 2505.358,
+        # --- SHIM STACKS (Chassis Side) ---
+        "FP wishbone lower front [mm]": -5,
+        "FP wishbone lower rear [mm]": 3,
+        "FP wishbone upper front [mm]": 5,
+        "FP wishbone upper rear [mm]": -5,
+        # --- SHIM STACKS (Wheel Side) ---
+        "LP wishbone upper [mm]": 5,
+        "LP wishbone lower [mm]": 5,
+        "LP tierod [mm]": 4
     }
 }
 
-st.title("🛠️ 992 GT3R Kinematics Tool")
-st.markdown("Select your current shim state and your target setup to see the required changes.")
+st.title("🏎️ 992 GT3 R | Kinematics Change Master")
+st.markdown("### Technical Transition Tool")
 
 # --- SELECTION ---
-col1, col2 = st.columns(2)
+c1, c2 = st.columns(2)
+with c1:
+    current = st.selectbox("Current Configuration", list(setups.keys()))
+with c2:
+    target = st.selectbox("Target Configuration", list(setups.keys()))
 
-with col1:
-    st.subheader("Current Setup")
-    current_name = st.selectbox("Current Car State", list(setup_specs.keys()), label_visibility="collapsed")
-    current_data = setup_specs[current_name]
-
-with col2:
-    st.subheader("Target Setup")
-    target_name = st.selectbox("New Target State", list(setup_specs.keys()), label_visibility="collapsed")
-    target_data = setup_specs[target_name]
-
-st.divider()
-
-# --- CALCULATION LOGIC ---
-if current_name == target_name:
-    st.success("✅ Car is currently at the target setup. No changes required.")
+if current == target:
+    st.success("✅ System check complete. Car is at current target specification.")
 else:
-    st.header(f"🔧 Adjustment Order: {current_name} ➡️ {target_name}")
-    
-    # We create a big checklist for the mechanics
-    for part in current_data.keys():
-        diff = target_data[part] - current_data[part]
-        
-        # UI Styling based on action required
-        if diff == 0:
-            st.write(f"⚪ **{part}:** No change (Target: {target_data[part]}mm)")
-        elif diff > 0:
-            st.warning(f"➕ **{part}:** ADD **{abs(diff)}mm** of shims")
-        else:
-            st.error(f"➖ **{part}:** REMOVE **{abs(diff)}mm** of shims")
+    st.divider()
+    cur_data = setups[current]
+    tar_data = setups[target]
 
-# --- TECHNICAL REFERENCE ---
-with st.expander("Reference Diagram"):
-    st.write("Ensure all spacers are seated correctly in the spherical bearings before torquing.")
-    # You can add a placeholder for an image here
-    #
+    # --- SECTION 1: TARGET GEOMETRY ---
+    st.subheader("📍 Target Geometry Reference")
+    g1, g2, g3, g4 = st.columns(4)
+    g1.metric("Ride Height", f"{tar_data['Reference rideheight [mm]']}mm")
+    g2.metric("Camber", f"{tar_data['Reference camber [°]']}°")
+    g3.metric("Roll Center", f"{tar_data['Rollcenter [mm]']}mm")
+    g4.metric("Antidive", f"{tar_data['Antidive [%]']}%")
+
+    # --- SECTION 2: THE WORK ORDER ---
+    st.subheader("🔧 Shim Adjustment Instructions")
+    
+    # Split into Chassis Side and Wheel Side to match the PDF layout
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        st.markdown("**Chassis Side Adjustments**")
+        for key in ["FP wishbone lower front [mm]", "FP wishbone lower rear [mm]", 
+                    "FP wishbone upper front [mm]", "FP wishbone upper rear [mm]"]:
+            diff = tar_data[key] - cur_data[key]
+            if diff > 0:
+                st.warning(f"➕ **{key.split('[')[0]}:** ADD {abs(diff)}mm")
+            elif diff < 0:
+                st.error(f"➖ **{key.split('[')[0]}:** REMOVE {abs(diff)}mm")
+            else:
+                st.write(f"✅ {key.split('[')[0]}: No Change")
+
+    with col_right:
+        st.markdown("**Wheel Side Adjustments**")
+        for key in ["LP wishbone upper [mm]", "LP wishbone lower [mm]", "LP tierod [mm]"]:
+            diff = tar_data[key] - cur_data[key]
+            if diff > 0:
+                st.warning(f"➕ **{key.split('[')[0]}:** ADD {abs(diff)}mm")
+            elif diff < 0:
+                st.error(f"➖ **{key.split('[')[0]}:** REMOVE {abs(diff)}mm")
+            else:
+                st.write(f"✅ {key.split('[')[0]}: No Change")
