@@ -1,65 +1,101 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 
-# 1. LINK TO YOUR MASTER GOOGLE SHEET
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTTulE0KjYP78CgSG0tBU9K21LUfrzZs2Uu9SSymBYUnXAoa2HfEsjRUsImdNpPWylDrCp5hJK-N4nD/pub?output=csv"
+# --- CONFIG ---
+st.set_page_config(page_title="GMG Engineering Command", layout="wide")
 
-st.set_page_config(page_title="GMG Racing Command", layout="wide")
+# --- DATA LOADING ---
+@st.cache_data
+def load_base_data():
+    # In a full setup, we'd write back to GitHub, but for now, we use a local CSV
+    return pd.read_csv("data.csv")
 
-@st.cache_data(ttl=60)
-def load_master_data():
-    df = pd.read_csv(SHEET_URL, skiprows=3)
-    df.columns = df.columns.str.strip()
-    df['Category'] = df['Item'].where(df['Runtime Limit'].isna()).ffill()
-    event_cols = [c for c in df.columns if any(x in c for x in ['JAN', 'FEB', 'SRO', 'TEST'])]
+if 'df' not in st.session_state:
+    st.session_state.df = load_base_data()
+
+# --- HEADER ---
+st.title("🛡️ 9509 GT3R | Engineering Command")
+
+# --- TAB 1: LIVE LIFELINES ---
+tab1, tab2 = st.tabs(["⏱️ Hour Log & Lifing", "🛠️ Kinematics Adjuster"])
+
+with tab1:
+    st.subheader("Component Health")
     
-    df_parts = df[df['Runtime Limit'].notnull()].copy()
-    df_parts['Runtime Limit'] = pd.to_numeric(df_parts['Runtime Limit'], errors='coerce')
+    # Editable Dataframe - Update hours directly in the table!
+    edited_df = st.data_editor(
+        st.session_state.df,
+        column_config={
+            "Current_Hours": st.column_config.NumberColumn("Chassis Hours", format="%.1f hrs"),
+            "Runtime Limit": st.column_config.NumberColumn("Limit", format="%d hrs"),
+        },
+        disabled=["Category", "Item"],
+        use_container_width=True
+    )
+
+    # Calculate Life % on the fly
+    edited_df['Life_Pct'] = (1 - (edited_df['Current_Hours'] / edited_df['Runtime Limit'])) * 100
     
-    def get_latest(row):
-        vals = pd.to_numeric(row[event_cols], errors='coerce').dropna()
-        return vals.iloc[-1] if not vals.empty else 0
+    if st.button("Save Changes to Chassis Log"):
+        st.session_state.df = edited_df
+        st.success("Internal Log Updated!")
+
+import streamlit as st
+import pandas as pd
+
+# 1. THE DATA VAULT (Baking the Porsche Sheet into the code)
+# Values represent mm thickness for each shim location
+setup_data = {
+    "FS15 (Daytona)": {
+        "Ride Height (mm)": 50, "Camber (deg)": -2.0,
+        "Lower WB Front": -5.0, "Lower WB Rear": 3.0,
+        "Upper WB Front": 5.0, "Upper WB Rear": -5.0,
+        "Tierod": 1.0
+    },
+    "FS15 (Nordschleife)": {
+        "Ride Height (mm)": 70, "Camber (deg)": -3.0,
+        "Lower WB Front": -5.0, "Lower WB Rear": 3.0,
+        "Upper WB Front": 5.0, "Upper WB Rear": -5.0,
+        "Tierod": 2.0
+    },
+    "FS16 (Evo Production)": {
+        "Ride Height (mm)": 50, "Camber (deg)": 0,
+        "Lower WB Front": -5.0, "Lower WB Rear": 3.0,
+        "Upper WB Front": 5.0, "Upper WB Rear": -5.0,
+        "Tierod": 2.0
+    }
+}
+
+st.title("🛠️ 9509 Setup & Kinematics")
+
+# 2. SELECTION INTERFACE
+col1, col2 = st.columns(2)
+with col1:
+    current_setup = st.selectbox("Current Car Setup", list(setup_data.keys()))
+with col2:
+    target_setup = st.selectbox("Target Technical Setup", list(setup_data.keys()))
+
+# 3. THE CALCULATION ENGINE
+if current_setup != target_setup:
+    st.divider()
+    st.subheader(f"Setup Change: {current_setup} ➡️ {target_setup}")
     
-    df_parts['Current_Hours'] = df_parts.apply(get_latest, axis=1)
-    df_parts['Life_Pct'] = (1 - (df_parts['Current_Hours'] / df_parts['Runtime Limit'])) * 100
-    return df_parts, event_cols
+    current_vals = setup_data[current_setup]
+    target_vals = setup_data[target_setup]
+    
+    # Mechanics Instruction List
+    st.info("💡 **Instructions for Crew:** (Positive = Add Shim, Negative = Remove Shim)")
+    
+    for key in current_vals.keys():
+        diff = target_vals[key] - current_vals[key]
+        
+        # Formatting the output for clarity in a loud garage
+        if diff == 0:
+            st.write(f"✅ **{key}:** No change required ({target_vals[key]})")
+        elif diff > 0:
+            st.warning(f"➕ **{key}:** ADD **{abs(diff)}mm** (Target: {target_vals[key]})")
+        else:
+            st.error(f"➖ **{key}:** REMOVE **{abs(diff)}mm** (Target: {target_vals[key]})")
 
-df, event_cols = load_master_data()
-
-# --- SIDEBAR: GLOBAL FLEET STATUS ---
-st.sidebar.title("🏁 GMG Fleet Status")
-st.sidebar.success("992 GT3R (9509): Race Ready")
-st.sidebar.warning("992 Cup: Prep Required")
-st.sidebar.error("LMP3: Gearbox Timeout")
-
-st.title("🛡️ 9509 GT3R | Technical Director's Command")
-
-# --- NAVIGATION TABS ---
-tabs = st.tabs(["📊 Fleet Health", "📈 Duty Cycle", "📋 Tech Audit", "📦 Logistics"])
-
-with tabs[0]:
-    st.subheader("Critical Component Status")
-    st.dataframe(df[['Category', 'Item', 'Current_Hours', 'Life_Pct']].style.background_gradient(subset=['Life_Pct'], cmap='RdYlGn'))
-
-with tabs[1]:
-    st.subheader("System Duty Cycle Analysis")
-    # Radar chart showing system-level stress
-    cat_health = df.groupby('Category')['Life_Pct'].mean().reset_index()
-    fig = px.line_polar(cat_health, r='Life_Pct', theta='Category', line_close=True,
-                        title="System Reliability Confidence", range_r=[0,100])
-    st.plotly_chart(fig, use_container_width=True)
-
-with tabs[2]:
-    st.subheader("Pre-Event Technical Reconciliation")
-    if st.button("Generate LaTeX Prep Report"):
-        st.write("Compiling parts data into LaTeX template...")
-        # This would link to a script to generate your formal PDFs
-        st.download_button("Download PDF Audit", "Sample Report Data", "Prep_Report.pdf")
-
-with tabs[3]:
-    st.subheader("Inventory & Staging")
-    pick_list = df[df['Life_Pct'] <= 20]
-    if not pick_list.empty:
-        st.write("The following items should be pulled from shop inventory for the next prep:")
-        st.table(pick_list[['Item', 'Life_Pct']])
+else:
+    st.success("Current setup is already at the target specification.")
