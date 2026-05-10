@@ -2,12 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+# 1. LINK TO YOUR MASTER GOOGLE SHEET
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTTulE0KjYP78CgSG0tBU9K21LUfrzZs2Uu9SSymBYUnXAoa2HfEsjRUsImdNpPWylDrCp5hJK-N4nD/pub?output=csv"
 
-st.set_page_config(page_title="9509 Pro-Engineer", layout="wide")
+st.set_page_config(page_title="GMG Racing Command", layout="wide")
 
 @st.cache_data(ttl=60)
-def load_pro_data():
+def load_master_data():
     df = pd.read_csv(SHEET_URL, skiprows=3)
     df.columns = df.columns.str.strip()
     df['Category'] = df['Item'].where(df['Runtime Limit'].isna()).ffill()
@@ -24,43 +25,41 @@ def load_pro_data():
     df_parts['Life_Pct'] = (1 - (df_parts['Current_Hours'] / df_parts['Runtime Limit'])) * 100
     return df_parts, event_cols
 
-df, event_cols = load_pro_data()
+df, event_cols = load_master_data()
 
-st.title("🏎️ 9509 GT3R | Professional Engineering Dashboard")
+# --- SIDEBAR: GLOBAL FLEET STATUS ---
+st.sidebar.title("🏁 GMG Fleet Status")
+st.sidebar.success("992 GT3R (9509): Race Ready")
+st.sidebar.warning("992 Cup: Prep Required")
+st.sidebar.error("LMP3: Gearbox Timeout")
 
-# --- PROACTIVE STRATEGY TAB ---
-tab1, tab2, tab3 = st.tabs(["Current Health", "Event Evolution", "Proactive Strategy"])
+st.title("🛡️ 9509 GT3R | Technical Director's Command")
 
-with tab1:
-    # Existing Health View
-    st.subheader("Component Inventory")
-    st.dataframe(df[['Category', 'Item', 'Runtime Limit', 'Current_Hours', 'Life_Pct']].style.background_gradient(subset=['Life_Pct'], cmap='RdYlGn'))
+# --- NAVIGATION TABS ---
+tabs = st.tabs(["📊 Fleet Health", "📈 Duty Cycle", "📋 Tech Audit", "📦 Logistics"])
 
-with tab2:
-    # Evolution Chart
-    st.subheader("Life Depreciation by Event")
-    tracked = st.multiselect("Parts to Plot", df['Item'].unique(), default=["Engine", "Drive Shaft, Left"])
-    # (Plotly logic from previous step goes here)
+with tabs[0]:
+    st.subheader("Critical Component Status")
+    st.dataframe(df[['Category', 'Item', 'Current_Hours', 'Life_Pct']].style.background_gradient(subset=['Life_Pct'], cmap='RdYlGn'))
 
-with tab3:
-    st.subheader("🔧 Service Projection Tool")
-    st.info("Predict which parts will expire based on upcoming track time.")
-    
-    col_a, col_b = st.columns(2)
-    with col_a:
-        next_event_hours = st.number_input("Projected Hours for Next Event (e.g. VIR):", value=10.0)
-        track_severity = st.slider("Track Severity Multiplier (1.0 = Standard, 1.2 = Rough/Sebring):", 1.0, 1.5, 1.0)
-    
-    # Calculate Projection
-    effective_added = next_event_hours * track_severity
-    df['Projected_Hours'] = df['Current_Hours'] + effective_added
-    df['Projected_Life_Pct'] = (1 - (df['Projected_Hours'] / df['Runtime Limit'])) * 100
-    
-    # Show "At Risk" parts
-    at_risk = df[df['Projected_Life_Pct'] <= 5].sort_values('Projected_Life_Pct')
-    
-    if not at_risk.empty:
-        st.warning(f"### ⚠️ {len(at_risk)} Parts will expire during the next event!")
-        st.table(at_risk[['Category', 'Item', 'Projected_Life_Pct']])
-    else:
-        st.success("All components are projected to clear the next event safely.")
+with tabs[1]:
+    st.subheader("System Duty Cycle Analysis")
+    # Radar chart showing system-level stress
+    cat_health = df.groupby('Category')['Life_Pct'].mean().reset_index()
+    fig = px.line_polar(cat_health, r='Life_Pct', theta='Category', line_close=True,
+                        title="System Reliability Confidence", range_r=[0,100])
+    st.plotly_chart(fig, use_container_width=True)
+
+with tabs[2]:
+    st.subheader("Pre-Event Technical Reconciliation")
+    if st.button("Generate LaTeX Prep Report"):
+        st.write("Compiling parts data into LaTeX template...")
+        # This would link to a script to generate your formal PDFs
+        st.download_button("Download PDF Audit", "Sample Report Data", "Prep_Report.pdf")
+
+with tabs[3]:
+    st.subheader("Inventory & Staging")
+    pick_list = df[df['Life_Pct'] <= 20]
+    if not pick_list.empty:
+        st.write("The following items should be pulled from shop inventory for the next prep:")
+        st.table(pick_list[['Item', 'Life_Pct']])
